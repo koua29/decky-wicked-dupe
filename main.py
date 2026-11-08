@@ -13,8 +13,10 @@ import time
 import decky
 
 APPID = "1371980"
-STEAM_ROOTS = ["~/.local/share/Steam", "~/.steam/steam"]
-SAVE_SUBPATH = "pfx/drive_c/users/steamuser/AppData/LocalLow"
+# Decky does not always run the backend with HOME set to the deck user.
+HOME = getattr(decky, "DECKY_USER_HOME", "") or os.path.expanduser("~")
+STEAM_ROOTS = [os.path.join(HOME, ".local/share/Steam"), os.path.join(HOME, ".steam/steam")]
+SAVE_SUBPATH = "pfx/drive_c/users/steamuser"
 GAME_EXE = "norestforthewicked"
 
 SNAPSHOT_DIR = os.path.join(decky.DECKY_PLUGIN_RUNTIME_DIR, "snapshot")
@@ -25,7 +27,7 @@ def _library_folders():
     """Every Steam library (the save sits in the library where the game is installed)."""
     roots = []
     for root in STEAM_ROOTS:
-        root = os.path.realpath(os.path.expanduser(root))
+        root = os.path.realpath(root)
         if os.path.isdir(root) and root not in roots:
             roots.append(root)
         vdf = os.path.join(root, "steamapps", "libraryfolders.vdf")
@@ -41,15 +43,25 @@ def _library_folders():
 
 
 def _store_dir():
-    """Newest build folder: .../Moon Studios/NoRestForTheWicked/Data/Store/<build>."""
-    builds = []
+    """Folder of the newest realm file inside the game's Proton prefix.
+
+    The video shows .../LocalLow/Moon Studios/NoRestForTheWicked/Data/Store/<build>,
+    but the exact names are not relied on: any folder holding realm files counts.
+    """
+    best, best_time = None, 0
     for lib in _library_folders():
-        low = os.path.join(lib, "steamapps", "compatdata", APPID, SAVE_SUBPATH)
-        for store in glob.glob(os.path.join(low, "Moon Studios", "*", "Data", "Store")):
-            builds += [d for d in glob.glob(os.path.join(store, "*")) if os.path.isdir(d)]
-    if not builds:
-        return None
-    return max(builds, key=os.path.getmtime)
+        users = os.path.join(lib, "steamapps", "compatdata", APPID, SAVE_SUBPATH)
+        for folder, _dirs, files in os.walk(users):
+            for f in files:
+                if "realm" in f.lower():
+                    t = os.path.getmtime(os.path.join(folder, f))
+                    if t > best_time:
+                        best, best_time = folder, t
+    return best
+
+
+def _searched():
+    return [os.path.join(lib, "steamapps", "compatdata", APPID) for lib in _library_folders()]
 
 
 def _realm_files(folder):
@@ -101,6 +113,7 @@ class Plugin:
         store = _store_dir()
         return {
             "found": store is not None,
+            "searched": _searched(),
             "build": os.path.basename(store) if store else "",
             "realm_files": len(_realm_files(store)),
             "game_running": _game_running(),
@@ -141,7 +154,7 @@ class Plugin:
         return {"ok": True, "code": "undone"}
 
     async def _main(self):
-        decky.logger.info(f"Wicked Dupe started, save folder: {_store_dir()}")
+        decky.logger.info(f"Wicked Dupe started, home {HOME}, searched {_searched()}, save folder: {_store_dir()}")
 
     async def _unload(self):
         pass

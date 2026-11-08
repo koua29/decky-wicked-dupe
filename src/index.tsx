@@ -5,6 +5,7 @@ import { GiChest } from "react-icons/gi";
 
 interface State {
   found: boolean;
+  searched: string[];
   build: string;
   realm_files: number;
   game_running: boolean;
@@ -44,6 +45,8 @@ const T = fr
       snapshotBtn: "Sauvegarder le realm",
       restoreBtn: "Restaurer le realm",
       undoBtn: "Annuler la dernière restauration",
+      refreshBtn: "Actualiser",
+      searched: "Cherché dans :",
       msg: {
         saved: "Realm sauvegardé.",
         restored: "Realm restauré. Clique sur Continuer.",
@@ -70,6 +73,8 @@ const T = fr
       snapshotBtn: "Save the realm",
       restoreBtn: "Restore the realm",
       undoBtn: "Undo the last restore",
+      refreshBtn: "Refresh",
+      searched: "Searched in:",
       msg: {
         saved: "Realm saved.",
         restored: "Realm restored. Click Continue.",
@@ -98,6 +103,9 @@ function Content() {
   const load = async () => setState(await getState());
   useEffect(() => {
     load();
+    // The panel can stay mounted while the game writes its save: keep the status fresh.
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
   }, []);
 
   const run = async (action: () => Promise<Result>) => {
@@ -119,6 +127,11 @@ function Content() {
             {!state ? "…" : state.found ? T.save(state.build, state.realm_files) : T.noSave}
             {state?.game_running && <div>{T.running}</div>}
             <div>{state?.snapshot_files ? T.snapshotAt(when(state.snapshot_time)) : T.noSnapshot}</div>
+            {state && !state.found && (
+              <div style={{ marginTop: "6px", wordBreak: "break-all" }}>
+                {T.searched} {state.searched.join(", ") || "—"}
+              </div>
+            )}
           </div>
         </PanelSectionRow>
         <PanelSectionRow>
@@ -133,6 +146,11 @@ function Content() {
             onClick={() => run(restore)}
           >
             {T.restoreBtn}
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy} onClick={load}>
+            {T.refreshBtn}
           </ButtonItem>
         </PanelSectionRow>
         {!!state?.undo_time && (
