@@ -1,6 +1,6 @@
 {
   "name": "decky-wicked-dupe",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Wicked Dupe, a Decky plugin: duplicates items in No Rest for the Wicked by saving and restoring the realm save files.",
   "type": "module",
   "scripts": {

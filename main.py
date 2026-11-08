@@ -5,10 +5,12 @@ buildings) and puts it back later. Character files are never touched, so what
 the character carries survives the restore: that is the duplication trick.
 """
 import glob
+import json
 import os
 import re
 import shutil
-import time
+import ssl
+import urllib.request
 
 import decky
 
@@ -21,6 +23,48 @@ GAME_EXE = "norestforthewicked"
 
 SNAPSHOT_DIR = os.path.join(decky.DECKY_PLUGIN_RUNTIME_DIR, "snapshot")
 UNDO_DIR = os.path.join(decky.DECKY_PLUGIN_RUNTIME_DIR, "before_restore")
+
+
+REPO = "koua29/decky-wicked-dupe"
+ZIP_NAME = "WickedDupe.zip"
+CURRENT_VERSION = getattr(decky, "DECKY_PLUGIN_VERSION", "0.0.0")
+
+
+def _ssl_context():
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        pass
+    for path in ("/etc/ssl/certs/ca-certificates.crt",
+                 "/etc/ca-certificates/extracted/tls-ca-bundle.pem"):
+        if os.path.exists(path):
+            return ssl.create_default_context(cafile=path)
+    return ssl.create_default_context()
+
+
+def _version_key(version):
+    numbers = tuple(int(n) for n in re.findall(r"\d+", version.split("-", 1)[0])[:3])
+    return numbers + (0,) * (3 - len(numbers))
+
+
+def _latest_release():
+    """Latest GitHub release, compared with the installed version."""
+    req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases/latest",
+                                 headers={"User-Agent": "WickedDupe"})
+    with urllib.request.urlopen(req, timeout=15, context=_ssl_context()) as resp:
+        release = json.loads(resp.read().decode("utf-8", "replace"))
+    asset = next((a for a in release.get("assets", []) if a.get("name") == ZIP_NAME), {})
+    latest = release.get("tag_name", "").lstrip("v")
+    digest = asset.get("digest") or ""
+    return {
+        "current": CURRENT_VERSION,
+        "latest": latest,
+        "available": bool(asset) and _version_key(latest) > _version_key(CURRENT_VERSION),
+        "url": release.get("html_url", ""),
+        "zip_url": asset.get("browser_download_url", ""),
+        "zip_sha256": digest[7:] if digest.startswith("sha256:") else "",
+    }
 
 
 def _library_folders():
@@ -152,6 +196,13 @@ class Plugin:
         _put_back(UNDO_DIR, store)
         decky.logger.info(f"undo: realm before the last restore put back into {store}")
         return {"ok": True, "code": "undone"}
+
+    async def check_update(self):
+        try:
+            return _latest_release()
+        except Exception as e:
+            decky.logger.warning(f"update check failed: {e}")
+            return {"current": CURRENT_VERSION, "error": str(e)}
 
     async def _main(self):
         decky.logger.info(f"Wicked Dupe started, home {HOME}, searched {_searched()}, save folder: {_store_dir()}")

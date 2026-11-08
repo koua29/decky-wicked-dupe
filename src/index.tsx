@@ -1,4 +1,4 @@
-import { ButtonItem, PanelSection, PanelSectionRow, staticClasses } from "@decky/ui";
+import { ButtonItem, Navigation, PanelSection, PanelSectionRow, staticClasses } from "@decky/ui";
 import { callable, definePlugin, toaster } from "@decky/api";
 import { useEffect, useState } from "react";
 import { GiChest } from "react-icons/gi";
@@ -14,6 +14,15 @@ interface State {
   undo_time: number;
 }
 
+interface Update {
+  current: string;
+  latest?: string;
+  available?: boolean;
+  zip_url?: string;
+  zip_sha256?: string;
+  error?: string;
+}
+
 interface Result {
   ok: boolean;
   code: string;
@@ -23,6 +32,10 @@ const getState = callable<[], State>("get_state");
 const snapshot = callable<[], Result>("snapshot");
 const restore = callable<[], Result>("restore");
 const undo = callable<[], Result>("undo");
+const checkUpdate = callable<[], Update>("check_update");
+
+const PLUGIN_NAME = "Wicked Dupe";
+const INSTALL_TYPE_UPDATE = 2; // InstallType.UPDATE in Decky Loader
 
 const locale = String((window as any).LocalizationManager?.m_rgLocalesToUse?.[0] || navigator.language || "en");
 const fr = locale.toLowerCase().startsWith("fr");
@@ -46,6 +59,14 @@ const T = fr
       restoreBtn: "Restaurer le realm",
       undoBtn: "Annuler la dernière restauration",
       refreshBtn: "Actualiser",
+      updates: "Mises à jour",
+      version: (v: string) => `Version ${v}`,
+      checkBtn: "Vérifier les mises à jour",
+      updateBtn: (v: string) => `Mettre à jour vers ${v}`,
+      upToDate: "Le plugin est à jour.",
+      updateFound: (v: string) => `Version ${v} disponible.`,
+      updateError: "GitHub injoignable.",
+      updated: "Mise à jour installée : rouvre Wicked Dupe.",
       searched: "Cherché dans :",
       msg: {
         saved: "Realm sauvegardé.",
@@ -74,6 +95,14 @@ const T = fr
       restoreBtn: "Restore the realm",
       undoBtn: "Undo the last restore",
       refreshBtn: "Refresh",
+      updates: "Updates",
+      version: (v: string) => `Version ${v}`,
+      checkBtn: "Check for updates",
+      updateBtn: (v: string) => `Update to ${v}`,
+      upToDate: "The plugin is up to date.",
+      updateFound: (v: string) => `Version ${v} is available.`,
+      updateError: "Could not reach GitHub.",
+      updated: "Update installed: reopen Wicked Dupe.",
       searched: "Searched in:",
       msg: {
         saved: "Realm saved.",
@@ -96,13 +125,48 @@ function when(ts: number) {
   });
 }
 
+async function installUpdate(update: Update) {
+  // Same call as Decky's own store: Decky asks for confirmation, checks the
+  // SHA-256 of the zip, then installs the new build.
+  const backend = (window as any).DeckyBackend;
+  if (!backend?.call) return;
+  await backend.call(
+    "utilities/install_plugin",
+    update.zip_url,
+    PLUGIN_NAME,
+    update.latest,
+    update.zip_sha256,
+    INSTALL_TYPE_UPDATE,
+  );
+  // The panel stays mounted on the old code: reload it, then close the menu.
+  const loader = (window as any).DeckyPluginLoader;
+  try {
+    await (loader?.importPlugin?.(PLUGIN_NAME, update.latest) ?? loader?.loadPlugin?.(PLUGIN_NAME) ?? Promise.resolve());
+  } catch (e) {
+    console.error("[Wicked Dupe] plugin reload failed", e);
+  }
+  toaster.toast({ title: "Wicked Dupe", body: T.updated });
+  Navigation.CloseSideMenus();
+}
+
 function Content() {
   const [state, setState] = useState<State | null>(null);
   const [busy, setBusy] = useState(false);
+  const [update, setUpdate] = useState<Update | null>(null);
+
+  const check = async (manual: boolean) => {
+    const res = await checkUpdate();
+    setUpdate(res);
+    if (manual) {
+      const body = res.error ? T.updateError : res.available ? T.updateFound(res.latest!) : T.upToDate;
+      toaster.toast({ title: "Wicked Dupe", body });
+    }
+  };
 
   const load = async () => setState(await getState());
   useEffect(() => {
     load();
+    check(false);
     // The panel can stay mounted while the game writes its save: keep the status fresh.
     const timer = setInterval(load, 5000);
     return () => clearInterval(timer);
@@ -160,6 +224,23 @@ function Content() {
             </ButtonItem>
           </PanelSectionRow>
         )}
+      </PanelSection>
+      <PanelSection title={T.updates}>
+        {update?.available && (
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={() => installUpdate(update)}>
+              {T.updateBtn(update.latest!)}
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
+        <PanelSectionRow>
+          <ButtonItem layout="below" onClick={() => check(true)}>
+            {T.checkBtn}
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <div style={muted}>{T.version(update?.current || "…")}</div>
+        </PanelSectionRow>
       </PanelSection>
       <PanelSection title={T.steps}>
         <PanelSectionRow>

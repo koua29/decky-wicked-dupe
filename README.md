@@ -31,6 +31,10 @@ https://github.com/koua29/decky-wicked-dupe/releases/latest/download/WickedDupe.
 
 The plugin looks for the save in `steamapps/compatdata/1371980/pfx/.../AppData/LocalLow/Moon Studios/*/Data/Store/<build>` in every Steam library, and uses the newest build folder.
 
+## 🔄 Updates
+
+From v0.2.0: open the plugin → **Check for updates** → **Update to x.y.z** (Decky asks for confirmation). Versions 0.1.x have no update button: reinstall once from the URL above.
+
 ## ⚠️ Warnings
 
 - Use it at your own risk: a bad restore can break the realm. Back up your saves.
