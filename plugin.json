@@ -1,0 +1,15 @@
+{
+  "name": "Wicked Dupe",
+  "author": "koua29",
+  "flags": [],
+  "api_version": 1,
+  "publish": {
+    "tags": [
+      "save",
+      "cheat",
+      "no-rest-for-the-wicked"
+    ],
+    "description": "Duplicates items in No Rest for the Wicked: saves the realm files and puts them back.",
+    "image": ""
+  }
+}
